@@ -65,3 +65,49 @@ After preparing databases and settings, you can train and test model by running 
 
 ## Cite
 S. -J. Horng, D. -T. Vu, T. -V. Nguyen, W. Zhou and C. -T. Lin, "Recognizing Palm Vein in Smartphones Using RGB Images," in IEEE Transactions on Industrial Informatics, vol. 18, no. 9, pp. 5992-6002, Sept. 2022, doi: 10.1109/TII.2021.3134016.
+
+## Run on macOS / Linux
+
+The code was originally written for Windows with TensorFlow 2.4 / Keras 2. It now runs on macOS and Linux with **TensorFlow 2.16+ / Keras 3**.
+
+**1. Python environment (feature extraction, training and testing)**
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r Keras_Code/requirements.txt
+```
+
+**2. Palm ROI extraction (C++ / OpenCV)**
+
+```bash
+# macOS
+brew install opencv pkg-config
+# Ubuntu / Debian
+# sudo apt install libopencv-dev pkg-config
+
+bash ROI_Extraction_Code/build.sh
+
+# a single image
+./ROI_Extraction_Code/palmlib path/to/hand.png /path/to/output --roi-size 128
+
+# a whole database: the sub-folder structure (Palm_ID) is kept in the output, so the
+# output folder can be used directly as a database folder of 'Keras_Code\data\'
+./ROI_Extraction_Code/palmlib Images/200_samples/ntust-hp /path/to/data/ntust-hp --roi-size 128
+```
+
+Add `--save-debug` to also save the binary mask and the cropped hand image of each sample.
+
+**3. Train and test**
+
+```bash
+cd Keras_Code
+../.venv/bin/python train.py \
+  --data_folder ../path/to/data \
+  --train_folder_file train_folders.txt \
+  --test_folder_file test_folders.txt \
+  --image_extension .png \
+  --model_name mpsnet
+```
+
+All the options of ['Keras_Code\options.py'](https://github.com/trungvdhp/mpsnet/blob/main/Keras_Code/options.py) (epochs, folds, batch sizes, 'model_name', 'image_extension', ...) can also be overridden on the command line; the default values are the settings used in our paper. Results are stored in 'Keras_Code/results/session_X/model_name/' (EER score files, DET and matching distance plots, feature files and TensorFlow-Lite models). ['Keras_Code\train.ipynb'](https://github.com/trungvdhp/mpsnet/blob/main/Keras_Code/train.ipynb) provides the same pipeline in a Jupyter Notebook.
+

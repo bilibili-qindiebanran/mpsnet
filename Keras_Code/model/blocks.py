@@ -1,9 +1,8 @@
-import tensorflow as tf
-import tensorflow.keras.backend as K
-from tensorflow.keras.layers import *
-from tensorflow.keras.models import *
-from tensorflow.keras.utils import *
-from tensorflow.keras import regularizers
+import keras
+from keras import ops, regularizers
+from keras.layers import (Activation, Add, BatchNormalization, Conv2D, DepthwiseConv2D,
+                          Dropout, GlobalAveragePooling2D, Multiply, PReLU, ReLU, Reshape,
+                          SeparableConv2D)
 from model.spp import SpatialPyramidPooling
 
 class NetBlock:
@@ -12,8 +11,8 @@ class NetBlock:
         self.weight_decay = config.weight_decay
         self.kernel_initializer = config.kernel_initializer
         self.kernel_regularizer = regularizers.l2(self.weight_decay)
-        self.channel_axis = 1 if K.image_data_format() == 'channels_first' else -1
-        self.shared_axes = [2, 3] if K.image_data_format() == 'channels_first' else [1, 2]
+        self.channel_axis = 1 if keras.config.image_data_format() == 'channels_first' else -1
+        self.shared_axes = [2, 3] if keras.config.image_data_format() == 'channels_first' else [1, 2]
         
     def _norm_layer(self, inputs, norm='batch', name=None):
         if(norm=='batch'):
@@ -36,7 +35,7 @@ class NetBlock:
         return new_v
     
     def _hard_swish(self, x):
-        return x * K.relu(x + 3.0, max_value=6.0) / 6.0
+        return x * ops.clip(x + 3.0, 0.0, 6.0) / 6.0
     
     def _squeeze(self, inputs):
         """Squeeze and Excitation.
@@ -44,12 +43,12 @@ class NetBlock:
         # Arguments
             inputs: Tensor, input tensor of conv layer.
         """
-        input_channels = int(inputs.shape[channel_axis])
+        input_channels = int(inputs.shape[self.channel_axis])
 
         x = GlobalAveragePooling2D()(inputs)
         x = Reshape((1, 1, input_channels))(x)
-        x = conv_block(x, input_channels//4, 1, 1, padding='same', norm=None, activation='relu')
-        x = conv_block(x, input_channels, 1, 1, padding='same', norm=None, activation='hard_sigmoid')
+        x = self.conv_block(x, input_channels//4, 1, 1, padding='same', norm=None, activation='relu')
+        x = self.conv_block(x, input_channels, 1, 1, padding='same', norm=None, activation='hard_sigmoid')
         x = Multiply()([inputs, x])
 
         return x
@@ -58,7 +57,7 @@ class NetBlock:
         if activation == 'hard_sigmoid':
             x = Activation(activation)(x)
         if activation == 'hard_swish':
-            x = Activation(_hard_swish)(x)
+            x = Activation(self._hard_swish)(x)
         if activation == 'relu':
             x = ReLU()(x)
         if activation == 'relu6':
@@ -87,8 +86,10 @@ class NetBlock:
 
         x = SeparableConv2D(filters, kernel_size, strides = strides, 
                             padding = padding, use_bias = self.use_bias,
-                            kernel_initializer = self.kernel_initializer,
-                            kernel_regularizer = self.kernel_regularizer
+                            depthwise_initializer = self.kernel_initializer,
+                            pointwise_initializer = self.kernel_initializer,
+                            depthwise_regularizer = self.kernel_regularizer,
+                            pointwise_regularizer = self.kernel_regularizer
                            )(inputs)
         x = self._norm_layer(x, norm=norm)
         x = self._activation_layer(x, activation=activation)
@@ -101,8 +102,8 @@ class NetBlock:
         
         x = DepthwiseConv2D(kernel_size, strides = strides, padding = padding, 
                             depth_multiplier = 1, use_bias = self.use_bias,
-                            kernel_initializer = self.kernel_initializer,
-                            kernel_regularizer = self.kernel_regularizer
+                            depthwise_initializer = self.kernel_initializer,
+                            depthwise_regularizer = self.kernel_regularizer
                            )(inputs)
 
         x = self._norm_layer(x, norm=norm)
@@ -132,14 +133,14 @@ class NetBlock:
 
     def bottleneck_v2(self, inputs, c, ks, t, s, r = False, norm='batch', activation='relu6'):
         
-        tchannel = K.int_shape(inputs)[self.channel_axis] * t
+        tchannel = int(inputs.shape[self.channel_axis]) * t
         
         x = self.conv_block(inputs, tchannel, kernel_size=1, strides=1, padding='same', norm=norm, activation=activation)
         x = self.depthwise_conv_block(x, ks, s, padding='same', norm=norm, activation=activation)
         x = self.conv_block(x, c, kernel_size=1, strides = 1, padding = 'same', norm=norm, activation=None)
         
         if r:
-            x = add([x, inputs])
+            x = Add()([x, inputs])
         
         return x
 
@@ -155,10 +156,10 @@ class NetBlock:
     
     def bottleneck_v3(self, inputs, c, ks, t, s, alpha=1.0, squeeze=False, norm='batch', activation='relu'):
 
-        input_shape = K.int_shape(inputs)
+        input_shape = tuple(inputs.shape)
         tchannel = int(t)
-        cchannel = int(alpha*filters)
-        r = s==1 and input_shape[channel_axis]==c
+        cchannel = int(alpha*c)
+        r = s==1 and input_shape[self.channel_axis]==c
 
         x = self.conv_block(inputs, tchannel, 1, 1, norm=norm, activation=activation)
         x = self.depthwise_conv_block(x, ks, s, padding='same', norm=norm, activation=activation)

@@ -6,6 +6,11 @@
 
 #include "palmlib.h"
 
+#include <filesystem>
+#include <iostream>
+
+namespace fs = std::filesystem;
+
 // Variables
 const double rmin = 0.3;
 const double rmax = 0.8;
@@ -126,10 +131,10 @@ vector<Point2i> bisector(const Point2i& t1, const Point2i& h1, const Point2i& t2
     else {
         res.at(0) = inter.p;
         auto ps1 = samplingLine(h1, h2);
-        const auto id1 = (inter.d12 < 0 || inter.d22 < 0) ? -1 : midByRate(saturate_cast<int>(ps1.size()), inter.d12, inter.d22);
+        const auto id1 = (inter.d12 < 0 || inter.d22 < 0) ? -1 : midByRate(static_cast<int>(ps1.size()), inter.d12, inter.d22);
         res.at(1) = (id1 < 0 || id1 >= ps1.size()) ? midpoint(h1, h2) : ps1.at(id1);
         auto ps2 = samplingLine(t1, t2);
-        const auto id2 = (inter.d11 < 0 || inter.d21 < 0) ? -1 : midByRate(saturate_cast<int>(ps2.size()), inter.d11, inter.d21);
+        const auto id2 = (inter.d11 < 0 || inter.d21 < 0) ? -1 : midByRate(static_cast<int>(ps2.size()), inter.d11, inter.d21);
         res.at(2) = (id2 < 0 || id2 >= ps2.size()) ? midpoint(t1, t2) : ps2.at(id2);
     }
 
@@ -138,8 +143,8 @@ vector<Point2i> bisector(const Point2i& t1, const Point2i& h1, const Point2i& t2
 
 vector<ConvexHull> correctHull(const Mat& img, const vector<int>& cvHull, const vector<Point2i>& contour, vector<double>& angles, size_t minHullEdgeSize, size_t maxHullEdgeSize,  size_t minHullContourPoints, double maxHullAngle, double maxContourAngle) {
 
-    const int contourSize = saturate_cast<int>(contour.size());
-    const int cvHullSize = saturate_cast<int>(cvHull.size());
+    const int contourSize = static_cast<int>(contour.size());
+    const int cvHullSize = static_cast<int>(cvHull.size());
     vector<ConvexHull> newHull;
     auto prev = cvHull.at(cvHull.size() - 1);
     angles = vector<double>(saturate_cast<unsigned long>(contourSize));
@@ -276,7 +281,7 @@ vector<ConvexHull> correctHull(const Mat& img, const vector<int>& cvHull, const 
                         if (dist == 0.0 || (dist - nde > minHullEdgeSize && j - nid > minHullEdgeSize && max_d - nde > minHullEdgeSize && max_d - dist > minHullEdgeSize)) {
                             if (diff > minHullEdgeSize) {
                                 if (max_id > j - minHullEdgeSize)
-                                    max_id = saturate_cast<int>(j - minHullEdgeSize);
+                                    max_id = static_cast<int>(j - minHullEdgeSize);
 
                                 const Point2i pprev = valueAt(contour, contourSize, prev);
                                 const Point2i pnid = valueAt(contour, contourSize, nid);
@@ -412,7 +417,7 @@ vector<ConvexHull> correctHull(const Mat& img, const vector<int>& cvHull, const 
         if (diff > minHullEdgeSize) {
 
             if (max_id > last - minHullEdgeSize) {
-                max_id = saturate_cast<int>(last - minHullEdgeSize);
+                max_id = static_cast<int>(last - minHullEdgeSize);
             }
 
             const Point2i pprev = valueAt(contour, contourSize, prev);
@@ -591,7 +596,7 @@ bool isValidValleyEdge(const Point2i& edgeBegin, const Point2i& edgeEnd, const P
 ValleyEdge findValleyEdges(const vector<Point2i>& contour, const vector<double>& angles, const ConvexHull& hull, double angleThreshold) {
 
     ValleyEdge valley;
-    const int contourSize = saturate_cast<int>(contour.size());
+    const int contourSize = static_cast<int>(contour.size());
     auto hull_begin = valueAt(contour, contourSize, hull.begin);
     auto hull_end = valueAt(contour, contourSize, hull.end);
     auto hull_farthest = valueAt(contour, contourSize, hull.farthest);
@@ -687,7 +692,7 @@ int lineContourIntersectionId(const vector<Point2i>& contour, const LineCoeffici
 
 pair<Point2i, Point2i> findReferenceLine(const vector<Point2i>& contour, const LineCoefficient& coef, const Point2i& ref, const Valley& v1, const Valley& v2) {
     pair<Point2i, Point2i> result;
-    const int contourSize = saturate_cast<int>(contour.size());
+    const int contourSize = static_cast<int>(contour.size());
     const int expand = contourSize / 5;
 
     // Find left intersection id
@@ -994,7 +999,7 @@ vector< pair<int, int> > selectTwoOptimalKeyVectors(const vector<Valley>& valley
 BoundingBox selectROICandidate(const Mat& binaryImage, const vector<Point2i>& contour, const vector<Valley>& valleys, int minROISize, int maxROISize, int angleThreshold) {
 
     const auto valleysSize = valleys.size();
-    const int contourSize = saturate_cast<int>(contour.size());
+    const int contourSize = static_cast<int>(contour.size());
     BoundingBox roi;
     errorString = "None";
 
@@ -1188,7 +1193,7 @@ void segmentHand(const Mat& rgbImage, Mat& binaryImage, vector<Point2i>& contour
         }
     }
     binary.setTo(0);
-    drawContours(binary, contours, saturate_cast<int>(largest_contour_index), Scalar(1.0), FILLED);
+    drawContours(binary, contours, static_cast<int>(largest_contour_index), Scalar(1.0), FILLED);
     contours.clear();
 
     // Apply adaptive threshold on region limited by binary mask
@@ -1220,7 +1225,7 @@ void segmentHand(const Mat& rgbImage, Mat& binaryImage, vector<Point2i>& contour
     contour = contours.at(largest_contour_index);
 
     binaryImage = Mat(binary.rows, binary.cols, CV_8UC1, Scalar(0));
-    drawContours(binaryImage, contours, saturate_cast<int>(largest_contour_index), Scalar(255.0), FILLED);
+    drawContours(binaryImage, contours, static_cast<int>(largest_contour_index), Scalar(255.0), FILLED);
 }
 
 Mat extractSaturationFromRGBImage(const Mat& src) {
@@ -1334,7 +1339,7 @@ void extractPalmROI(const Mat& rgbImage, Mat& roiImage, Mat& binaryImage, Mat& c
     roiImage = binaryImage;
 
     // Step 3. Find potential valleys between the adjacent fingers
-    const int contourSize = saturate_cast<int>(contour.size());
+    const int contourSize = static_cast<int>(contour.size());
     vector<int> cvHull;
     vector<double> angles;
     const double maxContourAngle = 170.0;
@@ -1446,27 +1451,108 @@ void extractPalmROI(const Mat& rgbImage, Mat& roiImage, Mat& binaryImage, Mat& c
     circle(croppedImage, bbox.bottomRight, 4, Scalar(0), -1);
 }
 
-int main() {
-    string test_dir = "D:/Test/";
-    string filename = "ntust_ip_s1";
-    string ext = ".png";
-    const int roiSize = 128;
+static bool isImageFile(const fs::path& p) {
+    string ext = p.extension().string();
+    transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+    return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp"
+        || ext == ".tif" || ext == ".tiff";
+}
 
-    string input_path = test_dir + filename + ext;
-    Mat bgrImage = imread(input_path, -1);
+static void printUsage(const char* program) {
+    cout << "Usage: " << program << " <input_image_or_dir> <output_dir> [--roi-size N] [--save-debug]" << endl;
+    cout << "  input_image_or_dir : a single image file, or a directory (processed recursively)" << endl;
+    cout << "  output_dir         : directory to store the ROI images, the sub-folder structure of the input is kept" << endl;
+    cout << "  --roi-size N       : size of the square ROI image (default: 128)" << endl;
+    cout << "  --save-debug       : also save <name>_binary.png and <name>_crop.png" << endl;
+}
+
+// Extract the palm ROI of one image and save it into outputDir.
+static bool processImage(const fs::path& inputPath, const fs::path& outputDir, int roiSize, bool saveDebug) {
+
+    Mat bgrImage = imread(inputPath.string(), IMREAD_COLOR);
+    if (bgrImage.empty()) {
+        cerr << "[skip] cannot read image: " << inputPath << endl;
+        return false;
+    }
+
     Mat rgbImage, roiImage, binaryImage, croppedImage;
     cvtColor(bgrImage, rgbImage, COLOR_BGR2RGB);
     extractPalmROI(rgbImage, roiImage, binaryImage, croppedImage, roiSize);
 
-    string output_roi_path = test_dir + filename + "_roi" + ext;
-    cvtColor(roiImage, roiImage, COLOR_RGB2BGR);
-    imwrite(output_roi_path, roiImage);
+    // 提取失败时 extractPalmROI 会提前返回，此时 roiImage 仍是掩膜图，
+    // 只有尺寸等于 roiSize 的图像才是真正的 ROI。
+    if (roiImage.empty() || roiImage.rows != roiSize || roiImage.cols != roiSize) {
+        cerr << "[skip] ROI extraction failed: " << inputPath << endl;
+        return false;
+    }
 
-    string binary_image_path = test_dir + filename + "_binary" + ext;
-    imwrite(binary_image_path, binaryImage);
+    fs::create_directories(outputDir);
+    const string stem = inputPath.stem().string();
 
-    string output_cropped_image = test_dir + filename + "_crop" + ext;
-    cvtColor(croppedImage, croppedImage, COLOR_RGB2BGR);
-    imwrite(output_cropped_image, croppedImage);
+    // roiImage and croppedImage are RGB images
+    Mat roiBgr = roiImage;
+    if (roiImage.channels() == 3) {
+        cvtColor(roiImage, roiBgr, COLOR_RGB2BGR);
+    }
+    imwrite((outputDir / (stem + "_roi.png")).string(), roiBgr);
 
-    return 0;
+    if (saveDebug) {
+        imwrite((outputDir / (stem + "_binary.png")).string(), binaryImage);
+        if (!croppedImage.empty()) {
+            Mat croppedBgr;
+            cvtColor(croppedImage, croppedBgr, COLOR_RGB2BGR);
+            imwrite((outputDir / (stem + "_crop.png")).string(), croppedBgr);
+        }
+    }
+
+    return true;
+}
+
+int main(int argc, char** argv) {
+
+    if (argc < 3) {
+        printUsage(argv[0]);
+        return 1;
+    }
+
+    const fs::path inputPath = argv[1];
+    const fs::path outputRoot = argv[2];
+    int roiSize = 128;
+    bool saveDebug = false;
+
+    for (int i = 3; i < argc; ++i) {
+        const string arg = argv[i];
+        if (arg == "--roi-size" && i + 1 < argc) {
+            roiSize = stoi(argv[++i]);
+        }
+        else if (arg == "--save-debug") {
+            saveDebug = true;
+        }
+        else {
+            cerr << "Unknown argument: " << arg << endl;
+            printUsage(argv[0]);
+            return 1;
+        }
+    }
+
+    if (fs::is_directory(inputPath)) {
+
+        const fs::path baseDir = fs::absolute(inputPath);
+        int total = 0, succeed = 0;
+
+        for (const auto& entry : fs::recursive_directory_iterator(baseDir)) {
+            if (!entry.is_regular_file() || !isImageFile(entry.path())) continue;
+            total++;
+
+            const fs::path relativeDir = fs::relative(entry.path().parent_path(), baseDir);
+            const fs::path outputDir = outputRoot / relativeDir;
+            if (processImage(entry.path(), outputDir, roiSize, saveDebug)) succeed++;
+        }
+
+        cout << "Extracted " << succeed << "/" << total << " images to " << outputRoot << endl;
+
+        return total == 0 ? 1 : 0;
+    }
+
+    return processImage(inputPath, outputRoot, roiSize, saveDebug) ? 0 : 1;
+}

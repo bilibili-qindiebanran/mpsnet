@@ -1,0 +1,13 @@
+# Trae IDE 本地工作目录
+.trae/
+
+# Python 虚拟环境与缓存
+.venv/
+__pycache__/
+.ipynb_checkpoints/
+
+# 训练与评测产物
+Keras_Code/results/
+
+# ROI 提取的可执行文件（由 build.sh 生成）
+/ROI_Extraction_Code/palmlib

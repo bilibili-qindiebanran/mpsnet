@@ -1,30 +1,30 @@
 import math
-import tensorflow as tf
-import tensorflow.keras.backend as K
-from tensorflow.keras.layers import Layer
-from tensorflow.keras import regularizers
-from tensorflow.keras.initializers import Constant
-from tensorflow.python.framework import tensor_util as tf_utils
+import keras
+from keras import ops
+from keras.layers import Layer
+from keras.initializers import Constant
 
-def resolve_training(layer, training):
-    if training is None:
-        training = K.learning_phase()
-    if isinstance(training, int):
-        training = bool(training)
-    if not layer.trainable:
-        # When the layer is not trainable, override the value
-        training = False
-    return tf_utils.constant_value(training)
+
+def _l2_normalize(x, axis):
+    # Keras 3 没有 ops.l2_normalize，这里显式实现
+    return x / ops.sqrt(ops.maximum(ops.sum(ops.square(x), axis=axis, keepdims=True),
+                                    keras.backend.epsilon()))
+
 
 class AdaCos(Layer):
-    
-    def __init__(self, 
+    """AdaCos: 自适应缩放余弦损失层（Keras 3 实现）。
+
+    训练时根据非目标类的指数均值 B_avg 与目标类角度的中位数 theta_med
+    动态更新缩放因子 s；推理时只使用当前的 s 做缩放。
+    """
+
+    def __init__(self,
                  n_classes,
                  is_dynamic=True,
                  initializer=None,
                  regularizer=None,
                  **kwargs):
-        
+
         super(AdaCos, self).__init__(**kwargs)
         self.n_classes = n_classes
         self.is_dynamic = is_dynamic
@@ -34,72 +34,72 @@ class AdaCos(Layer):
 
     def get_config(self):
 
-        config = super().get_config().copy()
+        config = super().get_config()
         config.update({
             'n_classes': self.n_classes,
             'is_dynamic': self.is_dynamic,
             'regularizer': self.regularizer
         })
         return config
-    
+
     def build(self, input_shape):
-        # Create a trainable weight variable for this layer.
+        # input_shape 为 (特征维度,), (标签维度,) 组成的序列
         super(AdaCos, self).build(input_shape[0])
-        
+
+        embedding_dim = int(input_shape[0][-1])
         self.W = self.add_weight(name='W',
-                                 shape=(input_shape[0][-1].value, self.n_classes),
+                                 shape=(embedding_dim, self.n_classes),
                                  initializer=self.initializer,
                                  trainable=True,
                                  regularizer=self.regularizer)
         if self.is_dynamic:
-            self.s = self.add_weight(shape=(),
+            self.s = self.add_weight(name='s',
+                                     shape=(),
                                      initializer=Constant(self.init_s),
                                      trainable=False,
-                                     aggregation=tf.VariableAggregation.MEAN)
+                                     aggregation='mean')
 
     def call(self, inputs, training=None):
         x, y = inputs
-        # Squeezing is necessary for Keras, it remove dimension 1, (None, 1) => (None,)
-        y = tf.reshape(y, [-1])
-        # Convert label to int32 as input type for onehot function
-        y = tf.cast(y, tf.int32)
-        
-        # Normalize features and weights and compute dot product
-        x = tf.nn.l2_normalize(x, axis=1, name='normed_embeddings')
-        w = tf.nn.l2_normalize(self.W, axis=0, name='normed_weights')
-        logits = tf.matmul(x, w, name='cos_t')
-        
-        # Fixed AdaCos
-        is_dynamic = tf_utils.constant_value(self.is_dynamic)
-        
-        if not is_dynamic:
-            # s is not created since we are not in dynamic mode
-            logits = self.init_s * logits
-        else:
-            training = resolve_training(self, training)
+        is_symbolic = isinstance(x, keras.KerasTensor)
 
-            if not training:
-                # We don't have labels to update s if we're not in training mode
-                logits = self.s * logits
-            else:
-                theta = tf.math.acos(K.clip(logits, -1.0 + K.epsilon(), 1.0 - K.epsilon()))
-                one_hot = tf.one_hot(y, depth=self.n_classes)
-                b_avg = tf.where(one_hot < 1.0,
-                                 tf.exp(self.s * logits),
-                                 tf.zeros_like(logits))
-                b_avg = tf.reduce_mean(tf.reduce_sum(b_avg, axis=1), name='B_avg')
-                #tf.squeeze(y)
-                theta_class = tf.gather_nd(theta, 
-                                           tf.stack([tf.range(tf.shape(y)[0]), y], axis=1),
-                                           name='theta_class')
-                mid_index = tf.shape(theta_class)[0] // 2 + 1
-                theta_med = tf.nn.top_k(theta_class, mid_index).values[-1]
+        # 标签统一成 int32 的一维张量
+        y = ops.cast(ops.reshape(y, [-1]), 'int32')
 
-                self.s.assign(tf.math.log(b_avg) / tf.math.cos(tf.minimum(math.pi/4, theta_med)))
-                # Scaled logits
-                logits = self.s * logits
-            
-        return tf.nn.softmax(logits)
+        # 归一化特征与权重，计算余弦相似度
+        x = _l2_normalize(x, axis=1)
+        w = _l2_normalize(self.W, axis=0)
+        logits = ops.matmul(x, w)
+
+        training = bool(training) if training is not None else False
+
+        # Fixed AdaCos：s 固定为初始值
+        if not self.is_dynamic:
+            return ops.softmax(self.init_s * logits)
+
+        # 推理阶段没有标签可用来更新 s；符号构图阶段没有真实数值，同样直接使用当前 s
+        if not training or is_symbolic:
+            return ops.softmax(self.s * logits)
+
+        # 动态更新 s
+        eps = keras.backend.epsilon()
+        theta = ops.arccos(ops.clip(logits, -1.0 + eps, 1.0 - eps))
+        one_hot = ops.one_hot(y, num_classes=self.n_classes)
+        b_avg = ops.where(one_hot < 1.0,
+                          ops.exp(self.s * logits),
+                          ops.zeros_like(logits))
+        b_avg = ops.mean(ops.sum(b_avg, axis=1))
+
+        theta_class = ops.take(theta, y, axis=1)
+        theta_med = ops.median(theta_class)
+
+        self.s.assign(ops.log(b_avg) / ops.cos(ops.minimum(math.pi / 4, theta_med)))
+
+        # 缩放后的 logits
+        return ops.softmax(self.s * logits)
 
     def compute_output_shape(self, input_shape):
+        # Keras 3 对多输入层传入的是「各输入的 shape」组成的序列，取特征输入那一个
+        if isinstance(input_shape, (list, tuple)) and isinstance(input_shape[0], (list, tuple)):
+            input_shape = input_shape[0]
         return (input_shape[0], self.n_classes)

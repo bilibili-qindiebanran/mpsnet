@@ -2,13 +2,17 @@ import argparse
 import os
 import time
 
+# 所有相对路径（data/、results/）都以本文件所在目录为基准，
+# 因此可以在任意工作目录下运行 train.py / train.ipynb。
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 class Options:
     def __init__(self):
         self.parser = argparse.ArgumentParser()
         self.initialized = False
 
     def initialize(self):
-        self.parser.add_argument('--data_folder', type=str, default='data/', help='The data folder which contains training and testing folders.')
+        self.parser.add_argument('--data_folder', type=str, default=None, help='The data folder which contains training and testing folders. Default: <Keras_Code>/data')
         self.parser.add_argument('--train_folder_file', type=str, default='train_folders.txt', help='The file storing list of database folders for training.')
         self.parser.add_argument('--test_folder_file', type=str, default='test_folders.txt', help='The file storing list of test folders for testing.')
         self.parser.add_argument('--image_extension', type=str, default='.tiff', help='The extension of image files.')
@@ -34,21 +38,23 @@ class Options:
         self.parser.add_argument('--distance_metric', type=str, default='cosine', help='The name of distance metric using for verification process')
         self.parser.add_argument('--random_state', type=int, default=42, help='Random state number')
        
-        
         self.initialized = True
 
     def parse(self):
         if not self.initialized:
             self.initialize()
-        self.opt = self.parser.parse_args(args=[])
+        self.opt = self.parser.parse_args()
         
-        with open(self.opt.data_folder + self.opt.train_folder_file,"r") as f:
+        if(self.opt.data_folder is None):
+            self.opt.data_folder = os.path.join(_SCRIPT_DIR, 'data')
+        
+        with open(os.path.join(self.opt.data_folder, self.opt.train_folder_file),"r") as f:
             self.opt.train_folders = f.readlines()
        
-        with open(self.opt.data_folder + self.opt.test_folder_file,"r") as f:
+        with open(os.path.join(self.opt.data_folder, self.opt.test_folder_file),"r") as f:
             self.opt.test_folders = f.readlines()
 
-        self.opt.output_folder = 'results\\' + 'session_' + str(self.opt.train_session) + '\\' + self.opt.model_name + '\\'
+        self.opt.output_folder = os.path.join(_SCRIPT_DIR, 'results', 'session_' + str(self.opt.train_session), self.opt.model_name) + os.sep
         os.makedirs(self.opt.output_folder, exist_ok = True)
         
         return self.opt

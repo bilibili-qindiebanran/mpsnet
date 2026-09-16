@@ -1,8 +1,8 @@
 from model.adacos import AdaCos
 from model.blocks import NetBlock
-from tensorflow.keras.layers import Input, Reshape, Conv2D, Activation, Flatten, Dropout, add
-from tensorflow.keras.models import Model
-import tensorflow.keras.backend as K
+from keras.layers import (Add, Activation, Conv2D, Dropout, Flatten,
+                          GlobalAveragePooling2D, Input, Reshape)
+from keras.models import Model
 
 class Net:
     
@@ -28,19 +28,19 @@ class Net:
         M0 = self.net_blocks.conv_block(I, c[0], 3, s[0], activation=activation)
         M1 = self.net_blocks.inverted_residual_block(M0, c=c[1], ks=3, t=t[1], s=s[1], n=n[1], activation=activation)
         M0 = self.net_blocks.separable_conv_block(M0, c[1], 3, s[1], activation=None)
-        A1 = add([M0, M1])
+        A1 = Add()([M0, M1])
         
         M2 = self.net_blocks.inverted_residual_block(A1, c=c[2], ks=3, t=t[2], s=s[2], n=n[2], activation=activation)
         A1 = self.net_blocks.separable_conv_block(A1, c[2], 3, s[2], activation=None)
-        A2 = add([A1, M2])
+        A2 = Add()([A1, M2])
         
         M3 = self.net_blocks.inverted_residual_block(A2, c=c[3], ks=3, t=t[3], s=s[3], n=n[3], activation=activation)
         A2 = self.net_blocks.separable_conv_block(A2, c[3], 3, s[3], activation=None)
-        A3 = add([A2, M3])
+        A3 = Add()([A2, M3])
         
         M4 = self.net_blocks.inverted_residual_block(A3, c=c[4], ks=3, t=t[4], s=s[4], n=n[4], activation=activation)
         A3 = self.net_blocks.separable_conv_block(A3, c[4], 3, s[4], activation=None)
-        A4 = add([A3, M4])
+        A4 = Add()([A3, M4])
         
         M = self.net_blocks.spp_block(A4, pool_list=[1, 2, 4])
         
@@ -110,26 +110,26 @@ class Net:
     
         x = self.net_blocks.conv_block(I, 16, 3 , 2, activation='hard_swish')
         
-        x = self.net_blocks.bottleneck_v3(x, 16 , 3, e=16 , s=1, alpha=alpha, squeeze=False, activation='relu6')
+        x = self.net_blocks.bottleneck_v3(x, 16 , 3, t=16 , s=1, alpha=alpha, squeeze=False, activation='relu6')
 
-        x = self.net_blocks.bottleneck_v3(x, 24 , 3, e=64 , s=2, alpha=alpha, squeeze=False, activation='relu6')
-        x = self.net_blocks.bottleneck_v3(x, 24 , 3, e=72 , s=1, alpha=alpha, squeeze=False, activation='relu6')
+        x = self.net_blocks.bottleneck_v3(x, 24 , 3, t=64 , s=2, alpha=alpha, squeeze=False, activation='relu6')
+        x = self.net_blocks.bottleneck_v3(x, 24 , 3, t=72 , s=1, alpha=alpha, squeeze=False, activation='relu6')
 
-        x = self.net_blocks.bottleneck_v3(x, 40 , 5, e=72 , s=2, alpha=alpha, squeeze=True, activation='relu6')
-        x = self.net_blocks.bottleneck_v3(x, 40 , 5, e=120, s=1, alpha=alpha, squeeze=True, activation='relu6')
-        x = self.net_blocks.bottleneck_v3(x, 40 , 5, e=120, s=1, alpha=alpha, squeeze=True, activation='relu6')
+        x = self.net_blocks.bottleneck_v3(x, 40 , 5, t=72 , s=2, alpha=alpha, squeeze=True, activation='relu6')
+        x = self.net_blocks.bottleneck_v3(x, 40 , 5, t=120, s=1, alpha=alpha, squeeze=True, activation='relu6')
+        x = self.net_blocks.bottleneck_v3(x, 40 , 5, t=120, s=1, alpha=alpha, squeeze=True, activation='relu6')
 
-        x = self.net_blocks.bottleneck_v3(x, 80 , 3, e=240, s=2, alpha=alpha, squeeze=False, activation='hard_swish')
-        x = self.net_blocks.bottleneck_v3(x, 80 , 3, e=200, s=1, alpha=alpha, squeeze=False, activation='hard_swish')
-        x = self.net_blocks.bottleneck_v3(x, 80 , 3, e=184, s=1, alpha=alpha, squeeze=False, activation='hard_swish')
-        x = self.net_blocks.bottleneck_v3(x, 80 , 3, e=184, s=1, alpha=alpha, squeeze=False, activation='hard_swish')
+        x = self.net_blocks.bottleneck_v3(x, 80 , 3, t=240, s=2, alpha=alpha, squeeze=False, activation='hard_swish')
+        x = self.net_blocks.bottleneck_v3(x, 80 , 3, t=200, s=1, alpha=alpha, squeeze=False, activation='hard_swish')
+        x = self.net_blocks.bottleneck_v3(x, 80 , 3, t=184, s=1, alpha=alpha, squeeze=False, activation='hard_swish')
+        x = self.net_blocks.bottleneck_v3(x, 80 , 3, t=184, s=1, alpha=alpha, squeeze=False, activation='hard_swish')
 
-        x = self.net_blocks.bottleneck_v3(x, 112, 3, e=480, s=1, alpha=alpha, squeeze=True, activation='hard_swish')
-        x = self.net_blocks.bottleneck_v3(x, 112, 3, e=672, s=1, alpha=alpha, squeeze=True, activation='hard_swish')
+        x = self.net_blocks.bottleneck_v3(x, 112, 3, t=480, s=1, alpha=alpha, squeeze=True, activation='hard_swish')
+        x = self.net_blocks.bottleneck_v3(x, 112, 3, t=672, s=1, alpha=alpha, squeeze=True, activation='hard_swish')
 
-        x = self.net_blocks.bottleneck_v3(x, 160, 5, e=672, s=2, alpha=alpha, squeeze=True, activation='hard_swish')
-        x = self.net_blocks.bottleneck_v3(x, 160, 5, e=960, s=1, alpha=alpha, squeeze=True, activation='hard_swish')
-        x = self.net_blocks.bottleneck_v3(x, 160, 5, e=960, s=1, alpha=alpha, squeeze=True, activation='hard_swish')
+        x = self.net_blocks.bottleneck_v3(x, 160, 5, t=672, s=2, alpha=alpha, squeeze=True, activation='hard_swish')
+        x = self.net_blocks.bottleneck_v3(x, 160, 5, t=960, s=1, alpha=alpha, squeeze=True, activation='hard_swish')
+        x = self.net_blocks.bottleneck_v3(x, 160, 5, t=960, s=1, alpha=alpha, squeeze=True, activation='hard_swish')
 
         x = self.net_blocks.conv_block(x, 960, 1, 1, activation='hard_swish')
 
@@ -147,7 +147,7 @@ class Net:
         I = Input(shape = input_shape)
 
         x = self.net_blocks.conv_block(I, c[0], 3, s[0], activation=activation) 
-        x = self.net_blocks.separable_conv_block(M, c[1], 3, s[1], activation=activation)
+        x = self.net_blocks.separable_conv_block(x, c[1], 3, s[1], activation=activation)
 
         x = self.net_blocks.inverted_residual_block(x, c=c[2], ks=3, t=t[2], s=s[2], n=n[2], activation=activation)
         x = self.net_blocks.inverted_residual_block(x, c=c[3], ks=3, t=t[3], s=s[3], n=n[3], activation=activation)
@@ -156,7 +156,7 @@ class Net:
         x = self.net_blocks.inverted_residual_block(x, c=c[6], ks=3, t=t[6], s=s[6], n=n[6], activation=activation)
 
         x = self.net_blocks.conv_block(x, 512, 1, 1, 'valid', activation=activation)
-        ks = K.int_shape(x)[2]
+        ks = int(x.shape[2])
         x = self.net_blocks.depthwise_conv_block(x, ks, 1, padding='valid', activation=None)
         
         self.backbone = Model(inputs=I, outputs=x, name=self.model_name)
@@ -167,12 +167,12 @@ class Net:
         x=self.backbone.outputs[0]
         
         if(len(x.shape)==2):
-            c = K.int_shape(x)[self.net_blocks.channel_axis]
+            c = int(x.shape[self.net_blocks.channel_axis])
             x = Reshape((1, 1, c))(x)
         x = self.net_blocks.conv_block(x, self.embedding_dim, 1, 1, 'valid', activation=None) 
         
         if(self.dropout>0):
-            x = Dropout(rate=dropout)(x)
+            x = Dropout(rate=self.dropout)(x)
     
         x = self.net_blocks.conv_block(x, n_classes, 1, 1, activation='softmax', norm=None)
         x = Reshape((n_classes,))(x)
@@ -183,12 +183,12 @@ class Net:
         
         label = Input(shape=(1,), name='label_input')
         softmax = self.softmax_model.outputs[0]
-        n_classes = K.int_shape(softmax)[-1]
+        n_classes = int(softmax.shape[-1])
         inputs = self.softmax_model.inputs[0]
         x = self.softmax_model.layers[self.end_fine_tune_layer_id].output
         
         if(self.dropout>0):
-            x = Dropout(rate=dropout)(x)
+            x = Dropout(rate=self.dropout)(x)
                 
         x = Flatten(name=self.embedding_layer_name)(x)
             

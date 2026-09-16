@@ -10,12 +10,18 @@
 #define _USE_MATH_DEFINES
 
 #include <stdlib.h>
+#include <climits>
 #include <algorithm>
 #include <string>
 #include <cmath>
 #include <time.h>
 #include <opencv2/core.hpp>
 #include <opencv2/opencv.hpp>
+
+#if CV_VERSION_MAJOR >= 5
+// OpenCV 5 把 contourArea / convexHull / findContours 等移到了 geometry 模块
+#include <opencv2/geometry.hpp>
+#endif
 
 
 using namespace cv;

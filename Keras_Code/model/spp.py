@@ -1,6 +1,7 @@
-import tensorflow as tf
-import tensorflow.keras.backend as K
-from tensorflow.keras.layers import Layer
+import keras
+from keras import ops
+from keras.layers import Layer
+
 
 class SpatialPyramidPooling(Layer):
     """Spatial pyramid pooling layer for 2D inputs.
@@ -25,15 +26,15 @@ class SpatialPyramidPooling(Layer):
         self.pool_list = pool_list
         self.pool_type = pool_type
         super(SpatialPyramidPooling, self).__init__(**kwargs)
-    
+
     def compute_output_shape(self, input_shape):
-        if(K.image_data_format()=='channels_first'):
+        if(keras.config.image_data_format()=='channels_first'):
             num_channels = input_shape[1]
         else:
             num_channels = input_shape[3]
-        num_output_per_channel = sum([i * i for i in self.pool_list])   
+        num_output_per_channel = sum([i * i for i in self.pool_list])
         output_channels = num_channels * num_output_per_channel
-        
+
         return (input_shape[0], output_channels)
 
     def get_config(self):
@@ -45,63 +46,56 @@ class SpatialPyramidPooling(Layer):
 
     def call(self, inputs):
 
-        image_data_format = K.image_data_format()
-        input_shape = K.int_shape(inputs)
+        image_data_format = keras.config.image_data_format()
+        input_shape = tuple(inputs.shape)
         outputs = []
-        epsilon = K.epsilon()
+        epsilon = keras.backend.epsilon()
 
         if image_data_format == 'channels_first':
-            
+
             for pool_size in self.pool_list:
-                
+
                 win_size = input_shape[2]//pool_size
-                
+
                 for jy in range(pool_size):
-                    
+
                     for ix in range(pool_size):
-                        
+
                         x = int(ix*win_size)
                         y = int(jy*win_size)
-                        
+
                         if(self.pool_type=='max'):
-                            pooled_vals = K.max(inputs[:,:,x:x+win_size,y:y+win_size], axis=(2, 3))
+                            pooled_vals = ops.max(inputs[:,:,x:x+win_size,y:y+win_size], axis=(2, 3))
                         elif(self.pool_type=='min'):
-                            pooled_vals = K.min(inputs[:,:,x:x+win_size,y:y+win_size], axis=(2, 3))
+                            pooled_vals = ops.min(inputs[:,:,x:x+win_size,y:y+win_size], axis=(2, 3))
                         elif(self.pool_type=='avg'):
-                            pooled_vals = K.mean(inputs[:,:,x:x+win_size,y:y+win_size], axis=(2, 3))
+                            pooled_vals = ops.mean(inputs[:,:,x:x+win_size,y:y+win_size], axis=(2, 3))
                         else:
                             if(win_size==1):
-                                pooled_vals = K.max(inputs[:,:,x:x+win_size,y:y+win_size], axis=(2, 3))
+                                pooled_vals = ops.max(inputs[:,:,x:x+win_size,y:y+win_size], axis=(2, 3))
                             else:
-                                max_vals = K.max(inputs[:,:,x:x+win_size,y:y+win_size], axis=(2, 3))
-                                mean_vals = K.mean(inputs[:,:,x:x+win_size,y:y+win_size], axis=(2, 3))
-                                std_vals = K.std(inputs[:,:,x:x+win_size,y:y+win_size], axis=(2, 3)) + epsilon
+                                max_vals = ops.max(inputs[:,:,x:x+win_size,y:y+win_size], axis=(2, 3))
+                                mean_vals = ops.mean(inputs[:,:,x:x+win_size,y:y+win_size], axis=(2, 3))
+                                std_vals = ops.std(inputs[:,:,x:x+win_size,y:y+win_size], axis=(2, 3)) + epsilon
                                 pooled_vals = (max_vals-mean_vals)/std_vals
-                                print(win_size, K.int_shape(pooled_vals))
-                        
+
                         outputs.append(pooled_vals)
         elif image_data_format == 'channels_last':
-            
+
             for pool_size in self.pool_list:
 
                 win_size = input_shape[2]//pool_size
-                
+
                 for jy in range(pool_size):
-                    
+
                     for ix in range(pool_size):
-                        
+
                         x = int(ix*win_size)
                         y = int(jy*win_size)
-                        pooled_val = K.max(inputs[:,x:x+win_size,y:y+win_size,:], axis=(1, 2))
+
+                        pooled_val = ops.max(inputs[:,x:x+win_size,y:y+win_size,:], axis=(1, 2))
                         outputs.append(pooled_val)
 
-        if image_data_format == 'channels_first':
-            outputs = K.concatenate(outputs)
-        elif image_data_format == 'channels_last':
-            #outputs = K.concatenate(outputs,axis = 1)
-            outputs = K.concatenate(outputs)
-            #outputs = K.reshape(outputs,(len(self.pool_list),self.num_outputs_per_channel,input_shape[0],input_shape[1]))
-            #outputs = K.permute_dimensions(outputs,(3,1,0,2))
-            #outputs = K.reshape(outputs,(input_shape[0], self.num_outputs_per_channel * self.nb_channels))
+        outputs = ops.concatenate(outputs, axis=-1)
 
         return outputs

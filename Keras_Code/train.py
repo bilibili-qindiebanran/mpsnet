@@ -4,16 +4,20 @@ from model.nets import Net
 
 from sklearn.metrics import pairwise_distances
 
-import tensorflow.keras.backend as K
-from tensorflow.keras.callbacks import *
-from tensorflow.keras.optimizers import *
-from tensorflow.keras.models import Model
+import tensorflow as tf
+import keras
+from keras.callbacks import ModelCheckpoint
+from keras.optimizers import RMSprop, Adam, Adadelta, SGD
+from keras.models import Model
 
 import os
 import pickle
 import h5py
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
+import tempfile
+import shutil
 
 try:
     tf_gpus = tf.config.list_physical_devices('GPU')
@@ -25,13 +29,13 @@ except:
 
 def get_optimizer(optimizer_name, lr):
     if(optimizer_name == 'rmsprop'):
-        return RMSprop(lr=lr)
+        return RMSprop(learning_rate=lr)
     elif(optimizer_name == 'adam'):
-        return Adam(lr=lr)
+        return Adam(learning_rate=lr)
     elif(optimizer_name == 'adadelta'):
-        return Adadelta(lr=lr)
+        return Adadelta(learning_rate=lr)
     elif(optimizer_name == 'sgd'):
-        return SGD(lr=lr)
+        return SGD(learning_rate=lr)
         
 def extract_genuines_impostors_1(distances,labels,sort=True):
     
@@ -94,28 +98,37 @@ def plot_DET(frr, far, linthresh, output_path):
     plt.ylabel('False Accepted Rate(%)')
     plot_legend('best')
     plt.savefig(output_path + '_DET.png')
+    plt.close()
 
 def plot_MDD(genuines, impostors, output_path):
     # Produce matching distance distributions
-    df1 = pd.DataFrame(genuines, columns = ['GenuineScores'])
-    df1.GenuineScores.plot.kde(label='Genuine')
-    df2 = pd.DataFrame(impostors, columns = ['ImpostorScores'])
-    df2.ImpostorScores.plot.kde(label='Impostor')
-    
-    # Plot matching distance distributions
+    # 两条 kde 曲线必须画在同一个 figure 上，否则保存的是空白图
     plt.figure()
+    ax = plt.gca()
+    pd.Series(genuines, name='Genuine').plot.kde(ax=ax, label='Genuine')
+    pd.Series(impostors, name='Impostor').plot.kde(ax=ax, label='Impostor')
+
+    # Plot matching distance distributions
     plt.xlabel('Distance')
     plt.ylabel('Probability Density')
     plot_legend('best')
     plt.savefig(output_path + 'MDD.png')
+    plt.close()
     
 def convert_to_TFLite(keras_model, file_path=''):
     
     print("Converting to TFLite...", end='\r')
-    converter = tf.lite.TFLiteConverter.from_keras_model(keras_model)
-    converter.optimizations=[tf.lite.Optimize.DEFAULT]
-    tflite_model = converter.convert()
-    open(file_path,'wb').write(tflite_model)
+    # Keras 3 模型先导出为 SavedModel，再交给 TFLite 转换器
+    export_dir = tempfile.mkdtemp()
+    try:
+        keras_model.export(export_dir)
+        converter = tf.lite.TFLiteConverter.from_saved_model(export_dir)
+        converter.optimizations=[tf.lite.Optimize.DEFAULT]
+        tflite_model = converter.convert()
+    finally:
+        shutil.rmtree(export_dir, ignore_errors=True)
+    with open(file_path,'wb') as f:
+        f.write(tflite_model)
     print("Converted to TFLite.")
     
     return tflite_model
@@ -131,17 +144,14 @@ def test(model, fold, n_sessions=1):
     
     if(model!=None):
 
-        inputs  = model.inputs[0]
-        outputs = model.outputs
-        get_output = K.function(inputs,outputs)
-        n = outputs[0].shape[-1]
+        n = int(model.output_shape[-1])
         features = np.zeros((dataloader.n_test_samples, n), dtype="float32")
         labels = dataloader.test_labels
 
         for i in range(0, dataloader.n_test_samples, dataloader.test_class_size):
             j = i+dataloader.test_class_size
             batch = dataloader.test_data[i:j]
-            fs = np.array(get_output(batch))[0]
+            fs = np.array(model.predict(batch, verbose=0))
             features[i:j] = fs
        
         # save features and labels
@@ -242,9 +252,9 @@ def train(
         else:
          
             print('Fitting fold #%i...'%fold)
-            K.clear_session()
-            train_labels_float = train_labels.astype(float)
-            valid_labels_float = valid_labels.astype(float)
+            keras.backend.clear_session()
+            train_labels_int = train_labels.astype('int32')
+            valid_labels_int = valid_labels.astype('int32')
             
             # Get model
             if(config.model_name=='mpsnet'):
@@ -262,7 +272,8 @@ def train(
             optimizer = get_optimizer(config.warmup_optimizer, config.warmup_lr)
             net.softmax_model.compile(loss="sparse_categorical_crossentropy", optimizer=optimizer, metrics=['accuracy'])
             postfix = config.output_folder + 'softmax_fold' + str(fold)
-            best_weight = postfix + '.hdf5'
+            # Keras 3 的 ModelCheckpoint 只支持 .keras / .weights.h5
+            best_weight = postfix + '.keras'
 
             if(retrain_softmax):
                 net.softmax_model.summary()
@@ -271,8 +282,8 @@ def train(
                 
                 checkpoint = ModelCheckpoint(best_weight, verbose=1, save_best_only=True)
                 
-                history = net.softmax_model.fit(train_data, train_labels_float, 
-                                                validation_data=(valid_data, valid_labels_float), 
+                history = net.softmax_model.fit(train_data, train_labels_int, 
+                                                validation_data=(valid_data, valid_labels_int), 
                                                 epochs=config.warmup_epochs, 
                                                 batch_size=config.warmup_batch_size,
                                                 class_weight=dataloader.class_weights,
@@ -285,12 +296,12 @@ def train(
 
             if(retrain_fine_tune):
                 net.softmax_model.load_weights(best_weight)
-                softmax_valid_scores = net.softmax_model.evaluate(valid_data, valid_labels_float, verbose=0)
+                softmax_valid_scores = net.softmax_model.evaluate(valid_data, valid_labels_int, verbose=0)
                 print('Fold #%i validation scores (Softmax): '%fold, softmax_valid_scores)
 
             ### Fine tune with AdaCos
             postfix = config.output_folder + 'adacos_fold' + str(fold)
-            best_weight =  postfix + '.hdf5'
+            best_weight =  postfix + '.keras'
             
             # Get fine tune model
             net.build_adacos_model()
@@ -303,10 +314,10 @@ def train(
                 print("Second phase: Fine tune the best softmax model with AdaCos...")
                 
                 checkpoint = ModelCheckpoint(best_weight, monitor='val_loss', verbose=1, save_best_only=True)
-                history = net.adacos_model.fit([train_data, train_labels], train_labels_float, 
+                history = net.adacos_model.fit([train_data, train_labels_int.reshape(-1, 1)], train_labels_int, 
                                                 batch_size=config.fine_tune_batch_size, 
                                                 epochs=config.fine_tune_epochs, 
-                                                validation_data=([valid_data, valid_labels], valid_labels_float), 
+                                                validation_data=([valid_data, valid_labels_int.reshape(-1, 1)], valid_labels_int), 
                                                 class_weight=dataloader.class_weights,
                                                 callbacks=[checkpoint])
                 history_path = postfix + '_history.pkl'
@@ -315,7 +326,7 @@ def train(
                     pickle.dump(history.history, f)
 
             net.adacos_model.load_weights(best_weight)
-            adacos_valid_scores = net.adacos_model.evaluate([valid_data, valid_labels], valid_labels_float, verbose=0)
+            adacos_valid_scores = net.adacos_model.evaluate([valid_data, valid_labels_int.reshape(-1, 1)], valid_labels_int, verbose=0)
             print('Fold #%i validation scores (AdaCos): '%fold, adacos_valid_scores)
         
         # Convert model to TensorFlow-Lite version
@@ -343,7 +354,7 @@ def train(
     scores_path = config.output_folder + dataloader.test_name + '_scores.txt'
     
     with open(scores_path, "w") as f:
-        file.write("Best fold: {:d}\nBest EER: {:.6f}\nAverage EER: {:.6f}".format(best_fold, best_eer,avg_eer)) 
+        f.write("Best fold: {:d}\nBest EER: {:.6f}\nAverage EER: {:.6f}".format(best_fold, best_eer,avg_eer)) 
     print("Best fold: %i\nBest EER: %.6f\nAverage EER: %.6f"%(best_fold, best_eer, avg_eer))
 
 if __name__ == '__main__':
@@ -360,5 +371,5 @@ if __name__ == '__main__':
         dataloader.load_test_data(test_folder = test_folder)
         train(retrain_softmax, retrain_fine_tune, convert_to_tflite, n_sessions=n_sessions)
         retrain_softmax   = False
-        retrain_finetune  = False
+        retrain_fine_tune = False
         convert_to_tflite = False

@@ -1,0 +1,8 @@
+# Web 后端依赖（叠加在项目根目录 .venv 之上：TensorFlow / Keras / OpenCV 见 Keras_Code/requirements.txt）
+# 安装：.venv/bin/pip install -r webapp/backend/requirements.txt
+fastapi>=0.110
+uvicorn[standard]>=0.27
+sqlalchemy>=2.0
+pydantic>=2.6
+python-multipart>=0.0.9
+aiofiles>=23.2

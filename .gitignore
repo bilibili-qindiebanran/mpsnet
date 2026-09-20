@@ -11,3 +11,8 @@ Keras_Code/results/
 
 # ROI 提取的可执行文件（由 build.sh 生成）
 /ROI_Extraction_Code/palmlib
+
+# Web 端（Vue3 + FastAPI）运行产物
+/webapp_workspace/
+/webapp/frontend/node_modules/
+/webapp/frontend/dist/

@@ -13,6 +13,7 @@ class Options:
 
     def initialize(self):
         self.parser.add_argument('--data_folder', type=str, default=None, help='The data folder which contains training and testing folders. Default: <Keras_Code>/data')
+        self.parser.add_argument('--output_folder', type=str, default=None, help='The folder to store the results. Default: <Keras_Code>/results/session_X/model_name')
         self.parser.add_argument('--train_folder_file', type=str, default='train_folders.txt', help='The file storing list of database folders for training.')
         self.parser.add_argument('--test_folder_file', type=str, default='test_folders.txt', help='The file storing list of test folders for testing.')
         self.parser.add_argument('--image_extension', type=str, default='.tiff', help='The extension of image files.')
@@ -54,7 +55,9 @@ class Options:
         with open(os.path.join(self.opt.data_folder, self.opt.test_folder_file),"r") as f:
             self.opt.test_folders = f.readlines()
 
-        self.opt.output_folder = os.path.join(_SCRIPT_DIR, 'results', 'session_' + str(self.opt.train_session), self.opt.model_name) + os.sep
+        if(self.opt.output_folder is None):
+            self.opt.output_folder = os.path.join(_SCRIPT_DIR, 'results', 'session_' + str(self.opt.train_session), self.opt.model_name)
+        self.opt.output_folder = os.path.abspath(self.opt.output_folder) + os.sep
         os.makedirs(self.opt.output_folder, exist_ok = True)
         
         return self.opt

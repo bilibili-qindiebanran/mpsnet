@@ -105,8 +105,17 @@ def plot_MDD(genuines, impostors, output_path):
     # 两条 kde 曲线必须画在同一个 figure 上，否则保存的是空白图
     plt.figure()
     ax = plt.gca()
-    pd.Series(genuines, name='Genuine').plot.kde(ax=ax, label='Genuine')
-    pd.Series(impostors, name='Impostor').plot.kde(ax=ax, label='Impostor')
+
+    def draw(values, name):
+        # 欠拟合时同类距离可能全部相同，协方差矩阵奇异会让 gaussian_kde 抛
+        # LinAlgError；这里退化成直方图，避免整个评估流程被绘图打断。
+        try:
+            pd.Series(values, name=name).plot.kde(ax=ax, label=name)
+        except Exception:
+            ax.hist(values, bins=50, alpha=0.5, label=name, density=True)
+
+    draw(genuines, 'Genuine')
+    draw(impostors, 'Impostor')
 
     # Plot matching distance distributions
     plt.xlabel('Distance')
@@ -224,11 +233,16 @@ def test(model, fold, n_sessions=1):
     print('Verification results:')
     print("ID: %i, Threshold: %.3f, FRR: %.3f, FAR: %.3f, EER: %.3f"%(k+1, eer_threshold, frr[k], far[k], eer))
     
-    # Plot DET
-    plot_DET(frr, far, linthresh=30, output_path=fpath)
-    
-    # Plot matching distance distributions
-    plot_MDD(genuines, impostors, output_path=fpath)
+    # DET 与匹配距离分布图属于辅助产物：绘图失败不应让已完成的评估整体失败
+    try:
+        plot_DET(frr, far, linthresh=30, output_path=fpath)
+    except Exception as e:
+        print('WARN: plot_DET failed:', e)
+
+    try:
+        plot_MDD(genuines, impostors, output_path=fpath)
+    except Exception as e:
+        print('WARN: plot_MDD failed:', e)
     
     return eer
 
